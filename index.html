@@ -504,6 +504,16 @@
     let lastFrame = performance.now();
     let stats = readStats();
     const laneRotationRad = 28 * Math.PI / 180;
+    const movementKeys = {
+      KeyW: "w",
+      KeyA: "a",
+      KeyS: "s",
+      KeyD: "d",
+      ArrowUp: "arrowup",
+      ArrowLeft: "arrowleft",
+      ArrowDown: "arrowdown",
+      ArrowRight: "arrowright"
+    };
 
     function readStats() {
       try {
@@ -751,8 +761,9 @@
 
     window.addEventListener("keydown", event => {
       const key = event.key.toLowerCase();
-      if (["w", "a", "s", "d", "arrowup", "arrowleft", "arrowdown", "arrowright"].includes(key)) {
-        keys.add(key);
+      const moveKey = movementKeys[event.code];
+      if (moveKey) {
+        keys.add(moveKey);
         event.preventDefault();
       }
       if (key === " ") {
@@ -766,7 +777,10 @@
     });
 
     window.addEventListener("keyup", event => {
-      keys.delete(event.key.toLowerCase());
+      const moveKey = movementKeys[event.code];
+      if (moveKey) {
+        keys.delete(moveKey);
+      }
     });
 
     window.addEventListener("resize", drawPlayer);
