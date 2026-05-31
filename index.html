@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prometheus Flame Trainer</title>
+  <style>
+    :root {
+      --bg: #111318;
+      --panel: #1a1e26;
+      --panel-2: #222836;
+      --ink: #f3efe6;
+      --muted: #aeb6c6;
+      --line: rgba(255,255,255,.13);
+      --accent: #f0b35a;
+      --danger: #ff4f3d;
+      --safe: #78d98b;
+      --focus: #82b7ff;
+      --arena: #2b303b;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(240,179,90,.11), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel-2);
+      color: var(--ink);
+      min-height: 42px;
+      padding: 0 14px;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: rgba(240,179,90,.65); }
+    button:focus-visible, input:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .app {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+      padding: 22px;
+      display: grid;
+      grid-template-columns: minmax(320px, 1fr) 300px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 14px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(24px, 4vw, 42px);
+      letter-spacing: 0;
+      line-height: 1.05;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      max-width: 760px;
+    }
+
+    .arena-wrap {
+      display: grid;
+      gap: 12px;
+      justify-items: center;
+      min-width: 0;
+    }
+
+    .arena-shell {
+      width: min(72vh, 100%);
+      max-width: 680px;
+      min-width: 300px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      padding: 10px;
+      background: linear-gradient(180deg, rgba(255,255,255,.05), transparent);
+      border: 1px solid var(--line);
+      border-radius: 50%;
+    }
+
+    .arena {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 50%, #353b48 0 58%, #252b35 100%);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.09), inset 0 0 42px rgba(0,0,0,.45);
+      touch-action: none;
+    }
+
+    .lane-field {
+      position: absolute;
+      inset: -18%;
+      transform: rotate(-28deg);
+      transform-origin: center;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .lane-field::before,
+    .lane-field::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: rgba(255,255,255,.10);
+      z-index: 3;
+    }
+
+    .lane-field::before { top: 33.333%; }
+    .lane-field::after { top: 66.666%; }
+
+    .lane-label {
+      position: absolute;
+      left: 16px;
+      color: rgba(243,239,230,.42);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      pointer-events: none;
+      z-index: 5;
+      transform: rotate(28deg);
+    }
+
+    .lane-label.top { top: 15%; }
+    .lane-label.mid { top: 48%; }
+    .lane-label.bot { top: 81%; }
+
+    .lane {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 33.333%;
+      opacity: 0;
+      transition: opacity 120ms ease, background-color 120ms ease;
+      pointer-events: none;
+    }
+
+    .lane.top { top: 0; }
+    .lane.mid { top: 33.333%; }
+    .lane.bot { top: 66.666%; }
+    .lane.warn {
+      opacity: .72;
+      background: rgba(255, 79, 61, .48);
+    }
+    .lane.safe {
+      opacity: .35;
+      background: rgba(120, 217, 139, .46);
+    }
+    .lane.burn {
+      opacity: .95;
+      background:
+        linear-gradient(90deg, transparent 0 35%, rgba(255,255,255,.55) 44%, rgba(255,79,61,.9) 52%, rgba(255,155,69,.75) 64%, transparent 100%),
+        rgba(255,79,61,.35);
+      animation: sweep 650ms ease-in-out both;
+    }
+
+    @keyframes sweep {
+      from { background-position: -42rem 0, 0 0; }
+      to { background-position: 42rem 0, 0 0; }
+    }
+
+    .player {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #dce8ff;
+      border: 3px solid #6ea8ff;
+      box-shadow: 0 0 0 4px rgba(110,168,255,.17), 0 0 24px rgba(110,168,255,.48);
+      transform: translate(-50%, -50%);
+      z-index: 10;
+    }
+
+    .player.hit {
+      background: #ffd6d1;
+      border-color: var(--danger);
+      box-shadow: 0 0 0 8px rgba(255,79,61,.20), 0 0 30px rgba(255,79,61,.66);
+    }
+
+    .player.dashing {
+      background: #ffffff;
+      border-color: #b8fff0;
+      box-shadow: 0 0 0 10px rgba(184,255,240,.16), 0 0 38px rgba(184,255,240,.72);
+    }
+
+    .prometheus {
+      position: absolute;
+      right: 5%;
+      top: 50%;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2px solid rgba(240,179,90,.85);
+      background: rgba(240,179,90,.18);
+      transform: translateY(-50%);
+      opacity: .55;
+      z-index: 4;
+    }
+
+    .phase {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 48px);
+      grid-template-areas:
+        ". up ."
+        "left down right";
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .dpad button {
+      width: 48px;
+      height: 48px;
+      padding: 0;
+      font-size: 22px;
+      line-height: 1;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .dpad [data-hold="w"] { grid-area: up; }
+    .dpad [data-hold="a"] { grid-area: left; }
+    .dpad [data-hold="s"] { grid-area: down; }
+    .dpad [data-hold="d"] { grid-area: right; }
+
+    .side {
+      display: grid;
+      gap: 12px;
+    }
+
+    .panel {
+      background: rgba(26,30,38,.94);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .segmented button[aria-pressed="true"] {
+      background: var(--accent);
+      color: #19130a;
+      border-color: transparent;
+      font-weight: 700;
+    }
+
+    .controls {
+      display: grid;
+      gap: 10px;
+    }
+
+    .control-row {
+      display: grid;
+      gap: 6px;
+    }
+
+    .control-row label {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .control-row input {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat {
+      min-height: 68px;
+      padding: 10px;
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.045);
+      border: 1px solid var(--line);
+    }
+
+    .stat b {
+      display: block;
+      font-size: 24px;
+      line-height: 1.1;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .pattern {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-height: 36px;
+      align-items: center;
+    }
+
+    .chip {
+      min-width: 34px;
+      min-height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .chip.done {
+      color: #112018;
+      background: var(--safe);
+      border-color: transparent;
+    }
+
+    .help {
+      color: var(--muted);
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .help li + li { margin-top: 6px; }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      max-width: 680px;
+    }
+
+    @media (max-width: 840px) {
+      .app {
+        grid-template-columns: 1fr;
+        padding: 14px;
+      }
+
+      header {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .arena-shell {
+        width: min(94vw, 620px);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 1ms !important;
+        transition-duration: 1ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>Prometheus Flame Trainer</h1>
+        <p class="subtitle">Тренажёр атаки Прометея: запомни безопасные полосы, потом проведи персонажа через серию огненных волн.</p>
+      </div>
+      <button id="startBtn" type="button">Старт / Enter</button>
+    </header>
+
+    <section class="arena-wrap" aria-label="Арена тренировки">
+      <div class="arena-shell">
+        <div id="arena" class="arena" tabindex="0" aria-label="Круглая арена. Управление WASD или стрелками.">
+          <div class="prometheus" aria-hidden="true"></div>
+          <div class="lane-field" aria-hidden="true">
+            <div class="lane-label top">верх</div>
+            <div class="lane-label mid">центр</div>
+            <div class="lane-label bot">низ</div>
+            <div class="lane top" data-lane="0"></div>
+            <div class="lane mid" data-lane="1"></div>
+            <div class="lane bot" data-lane="2"></div>
+          </div>
+          <div id="player" class="player"></div>
+        </div>
+      </div>
+      <div id="phase" class="phase">Выбери режим и нажми старт.</div>
+      <div class="dpad" aria-label="Экранное управление">
+        <button type="button" data-hold="w" aria-label="Вверх">↑</button>
+        <button type="button" data-hold="a" aria-label="Влево">←</button>
+        <button type="button" data-hold="s" aria-label="Вниз">↓</button>
+        <button type="button" data-hold="d" aria-label="Вправо">→</button>
+      </div>
+      <div class="footer-note">Механика учебная: показываются опасные красные полосы, огонь идёт в том же порядке. Твоя задача — помнить, где безопасно стоять.</div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h2>Режим</h2>
+        <div class="segmented" role="group" aria-label="Количество шагов">
+          <button id="mode3" type="button" aria-pressed="true">3 шага</button>
+          <button id="mode5" type="button" aria-pressed="false">5 шагов</button>
+        </div>
+      </section>
+
+      <section class="panel controls">
+        <h2>Темп</h2>
+        <div class="control-row">
+          <label for="speed">Скорость волн: <span id="speedValue">1.0x</span></label>
+          <input id="speed" type="range" min="0.65" max="1.45" step="0.05" value="1">
+        </div>
+        <div class="control-row">
+          <label for="playerSpeed">Скорость персонажа: <span id="playerSpeedValue">1.0x</span></label>
+          <input id="playerSpeed" type="range" min="0.65" max="1.6" step="0.05" value="1">
+        </div>
+        <button id="resetStats" type="button">Сбросить счёт</button>
+      </section>
+
+      <section class="panel">
+        <h2>Счёт</h2>
+        <div class="stats">
+          <div class="stat"><b id="wins">0</b><span>успешно</span></div>
+          <div class="stat"><b id="hits">0</b><span>попаданий</span></div>
+          <div class="stat"><b id="streak">0</b><span>серия</span></div>
+          <div class="stat"><b id="best">0</b><span>лучшая</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Прогресс</h2>
+        <div id="pattern" class="pattern" aria-live="polite"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Как тренироваться</h2>
+        <ul class="help">
+          <li>Смотри не на красное, а на пустую безопасную полосу.</li>
+          <li>Называй маршрут вслух: верх, центр, низ.</li>
+          <li>После первого показа сразу встань в первую safe-зону.</li>
+          <li>WASD или стрелки двигают кружок, Space даёт дэш.</li>
+        </ul>
+      </section>
+    </aside>
+  </main>
+
+  <script>
+    const lanes = ["верх", "центр", "низ"];
+    const arena = document.getElementById("arena");
+    const player = document.getElementById("player");
+    const phase = document.getElementById("phase");
+    const startBtn = document.getElementById("startBtn");
+    const mode3 = document.getElementById("mode3");
+    const mode5 = document.getElementById("mode5");
+    const speedInput = document.getElementById("speed");
+    const speedValue = document.getElementById("speedValue");
+    const playerSpeedInput = document.getElementById("playerSpeed");
+    const playerSpeedValue = document.getElementById("playerSpeedValue");
+    const patternEl = document.getElementById("pattern");
+    const winsEl = document.getElementById("wins");
+    const hitsEl = document.getElementById("hits");
+    const streakEl = document.getElementById("streak");
+    const bestEl = document.getElementById("best");
+    const resetStats = document.getElementById("resetStats");
+    const laneEls = Array.from(document.querySelectorAll(".lane"));
+
+    let modeSteps = 3;
+    let running = false;
+    let pattern = [];
+    let currentStep = -1;
+    let hitThisRun = false;
+    let pos = { x: 0.5, y: 0.5 };
+    let keys = new Set();
+    let lastMove = { x: 1, y: 0 };
+    let dashInvulnerable = false;
+    let dashReadyAt = 0;
+    let lastFrame = performance.now();
+    let stats = readStats();
+    const laneRotationRad = 28 * Math.PI / 180;
+
+    function readStats() {
+      try {
+        const saved = JSON.parse(localStorage.getItem("prometheusTrainerStats") || "{}");
+        return {
+          wins: saved.wins || 0,
+          hits: saved.hits || 0,
+          streak: saved.streak || 0,
+          best: saved.best || 0
+        };
+      } catch {
+        return { wins: 0, hits: 0, streak: 0, best: 0 };
+      }
+    }
+
+    function writeStats() {
+      localStorage.setItem("prometheusTrainerStats", JSON.stringify(stats));
+      winsEl.textContent = stats.wins;
+      hitsEl.textContent = stats.hits;
+      streakEl.textContent = stats.streak;
+      bestEl.textContent = stats.best;
+    }
+
+    function setMode(steps) {
+      if (running) return;
+      modeSteps = steps;
+      mode3.setAttribute("aria-pressed", String(steps === 3));
+      mode5.setAttribute("aria-pressed", String(steps === 5));
+      phase.textContent = steps === 3 ? "Режим первой атаки: 3 шага." : "Режим второй атаки: 5 шагов.";
+      renderPattern();
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms / Number(speedInput.value)));
+    }
+
+    function randomStep() {
+      const count = Math.random() < 0.58 ? 2 : 1;
+      const indexes = [0, 1, 2].sort(() => Math.random() - 0.5);
+      return indexes.slice(0, count).sort();
+    }
+
+    function safeLanesFor(step) {
+      return [0, 1, 2].filter(lane => !step.includes(lane));
+    }
+
+    function makePattern() {
+      const result = [];
+      for (let i = 0; i < modeSteps; i += 1) {
+        let step = randomStep();
+        if (i > 0) {
+          const prevSafe = safeLanesFor(result[i - 1]).join(",");
+          let guard = 0;
+          while (safeLanesFor(step).join(",") === prevSafe && guard < 8) {
+            step = randomStep();
+            guard += 1;
+          }
+        }
+        result.push(step);
+      }
+      return result;
+    }
+
+    function renderPattern() {
+      patternEl.innerHTML = "";
+      const count = pattern.length || modeSteps;
+      for (let i = 0; i < count; i += 1) {
+        const chip = document.createElement("div");
+        chip.className = "chip" + (i < currentStep ? " done" : "");
+        chip.textContent = i + 1;
+        patternEl.appendChild(chip);
+      }
+    }
+
+    function clearLanes() {
+      laneEls.forEach(el => {
+        el.classList.remove("warn", "safe", "burn");
+      });
+    }
+
+    function markLanes(indexes, className) {
+      indexes.forEach(index => laneEls[index].classList.add(className));
+    }
+
+    function setPlayerHit(active) {
+      player.classList.toggle("hit", active);
+    }
+
+    function setPlayerDashing(active) {
+      player.classList.toggle("dashing", active);
+    }
+
+    function resetPlayer() {
+      pos = { x: 0.5, y: 0.5 };
+      drawPlayer();
+    }
+
+    function drawPlayer() {
+      const rect = arena.getBoundingClientRect();
+      player.style.left = `${pos.x * rect.width}px`;
+      player.style.top = `${pos.y * rect.height}px`;
+    }
+
+    function clampToCircle(next) {
+      const dx = next.x - 0.5;
+      const dy = next.y - 0.5;
+      const dist = Math.hypot(dx, dy);
+      const max = 0.485;
+      if (dist <= max) return next;
+      const scale = max / dist;
+      return { x: 0.5 + dx * scale, y: 0.5 + dy * scale };
+    }
+
+    function currentPlayerLane() {
+      const dx = pos.x - 0.5;
+      const dy = pos.y - 0.5;
+      const rotatedY = dx * Math.sin(laneRotationRad) + dy * Math.cos(laneRotationRad);
+      const laneY = rotatedY + 0.5;
+      if (laneY < 1 / 3) return 0;
+      if (laneY < 2 / 3) return 1;
+      return 2;
+    }
+
+    function dash() {
+      const now = performance.now();
+      if (now < dashReadyAt) return;
+      dashReadyAt = now + 520;
+      dashInvulnerable = true;
+      setPlayerDashing(true);
+      pos = clampToCircle({
+        x: pos.x + lastMove.x * 0.18,
+        y: pos.y + lastMove.y * 0.18
+      });
+      drawPlayer();
+      window.setTimeout(() => {
+        dashInvulnerable = false;
+        setPlayerDashing(false);
+      }, 230);
+    }
+
+    function applyHit() {
+      if (!hitThisRun) {
+        stats.hits += 1;
+        stats.streak = 0;
+        writeStats();
+      }
+      hitThisRun = true;
+      setPlayerHit(true);
+      window.setTimeout(() => setPlayerHit(false), 280);
+    }
+
+    async function showPattern() {
+      phase.textContent = "Запоминай безопасные полосы.";
+      for (let i = 0; i < pattern.length; i += 1) {
+        clearLanes();
+        const unsafe = pattern[i];
+        const safe = safeLanesFor(unsafe);
+        markLanes(unsafe, "warn");
+        markLanes(safe, "safe");
+        phase.textContent = `Показ ${i + 1}/${pattern.length}: safe ${safe.map(x => lanes[x]).join(" или ")}`;
+        await delay(760);
+        clearLanes();
+        await delay(210);
+      }
+    }
+
+    async function runFire() {
+      phase.textContent = "Огонь пошёл. Держись в safe-зонах.";
+      for (let i = 0; i < pattern.length; i += 1) {
+        currentStep = i;
+        renderPattern();
+        clearLanes();
+        markLanes(pattern[i], "burn");
+        await delay(310);
+        if (pattern[i].includes(currentPlayerLane()) && !dashInvulnerable) {
+          applyHit();
+          phase.textContent = `Попадание на шаге ${i + 1}. Продолжай маршрут.`;
+        } else if (pattern[i].includes(currentPlayerLane()) && dashInvulnerable) {
+          phase.textContent = `Шаг ${i + 1}/${pattern.length}: дэш спас.`;
+        } else {
+          phase.textContent = `Шаг ${i + 1}/${pattern.length}: чисто.`;
+        }
+        await delay(520);
+        clearLanes();
+        await delay(120);
+      }
+    }
+
+    async function startRun() {
+      if (running) return;
+      running = true;
+      hitThisRun = false;
+      currentStep = 0;
+      startBtn.disabled = true;
+      mode3.disabled = true;
+      mode5.disabled = true;
+      resetPlayer();
+      pattern = makePattern();
+      renderPattern();
+      arena.focus();
+
+      await showPattern();
+      await delay(520);
+      await runFire();
+
+      currentStep = pattern.length;
+      renderPattern();
+      clearLanes();
+      if (!hitThisRun) {
+        stats.wins += 1;
+        stats.streak += 1;
+        stats.best = Math.max(stats.best, stats.streak);
+        phase.textContent = "Успешно. Ещё круг?";
+      } else {
+        phase.textContent = "Раунд завершён. Повтори и держи safe-маршрут.";
+      }
+      writeStats();
+      startBtn.disabled = false;
+      mode3.disabled = false;
+      mode5.disabled = false;
+      running = false;
+    }
+
+    function frame(now) {
+      const dt = Math.min(40, now - lastFrame) / 1000;
+      lastFrame = now;
+      let dx = 0;
+      let dy = 0;
+      if (keys.has("a") || keys.has("arrowleft")) dx -= 1;
+      if (keys.has("d") || keys.has("arrowright")) dx += 1;
+      if (keys.has("w") || keys.has("arrowup")) dy -= 1;
+      if (keys.has("s") || keys.has("arrowdown")) dy += 1;
+      if (dx || dy) {
+        const len = Math.hypot(dx, dy) || 1;
+        lastMove = { x: dx / len, y: dy / len };
+        const speed = 0.66 * Number(playerSpeedInput.value);
+        pos = clampToCircle({
+          x: pos.x + lastMove.x * speed * dt,
+          y: pos.y + lastMove.y * speed * dt
+        });
+        drawPlayer();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener("keydown", event => {
+      const key = event.key.toLowerCase();
+      if (["w", "a", "s", "d", "arrowup", "arrowleft", "arrowdown", "arrowright"].includes(key)) {
+        keys.add(key);
+        event.preventDefault();
+      }
+      if (key === " ") {
+        event.preventDefault();
+        dash();
+      }
+      if (key === "enter") {
+        event.preventDefault();
+        startRun();
+      }
+    });
+
+    window.addEventListener("keyup", event => {
+      keys.delete(event.key.toLowerCase());
+    });
+
+    window.addEventListener("resize", drawPlayer);
+    startBtn.addEventListener("click", startRun);
+    mode3.addEventListener("click", () => setMode(3));
+    mode5.addEventListener("click", () => setMode(5));
+    speedInput.addEventListener("input", () => {
+      speedValue.textContent = `${Number(speedInput.value).toFixed(2).replace(/0$/, "")}x`;
+    });
+    playerSpeedInput.addEventListener("input", () => {
+      playerSpeedValue.textContent = `${Number(playerSpeedInput.value).toFixed(2).replace(/0$/, "")}x`;
+    });
+    resetStats.addEventListener("click", () => {
+      stats = { wins: 0, hits: 0, streak: 0, best: 0 };
+      writeStats();
+    });
+    document.querySelectorAll("[data-hold]").forEach(button => {
+      const key = button.dataset.hold;
+      const release = () => keys.delete(key);
+      button.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        keys.add(key);
+        button.setPointerCapture(event.pointerId);
+      });
+      button.addEventListener("pointerup", release);
+      button.addEventListener("pointercancel", release);
+      button.addEventListener("lostpointercapture", release);
+    });
+
+    writeStats();
+    renderPattern();
+    drawPlayer();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
